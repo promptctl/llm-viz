@@ -1,0 +1,42 @@
+[
+ {
+  "run": "cold",
+  "wall_ms": 33220,
+  "rss_delta_bytes": 2501361664,
+  "rss_after_bytes": 3568746496,
+  "path": "raw",
+  "adapter": "apple",
+  "maxBufferSize": 268435456,
+  "from_cache": false,
+  "fetch_ms": 24398,
+  "bytes": 548105171,
+  "upload_ms": 217,
+  "tensors": 160,
+  "gpu_bytes": 548090880,
+  "dtype": "F32",
+  "load_ms": 24615,
+  "ua_memory_bytes": 549154365,
+  "js_heap": 549386602,
+  "errors": []
+ },
+ {
+  "run": "warm",
+  "wall_ms": 11666,
+  "rss_delta_bytes": 1903149056,
+  "rss_after_bytes": 2990522368,
+  "path": "raw",
+  "adapter": "apple",
+  "maxBufferSize": 268435456,
+  "from_cache": true,
+  "fetch_ms": 330,
+  "bytes": 548105171,
+  "upload_ms": 189,
+  "tensors": 160,
+  "gpu_bytes": 548090880,
+  "dtype": "F32",
+  "load_ms": 519,
+  "ua_memory_bytes": 549155041,
+  "js_heap": 549386418,
+  "errors": []
+ }
+]
