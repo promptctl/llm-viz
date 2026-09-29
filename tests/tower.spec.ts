@@ -98,15 +98,34 @@ test('a slider moved mid-transition supersedes the first transition and settles 
   await open(page, boot);
   const superseded = nextEvent(page, 'transition', (event) => event.outcome === 'superseded');
   const arrival = settled(page);
-  await page.locator('input[name=L]').fill('30');
-  await page.locator('input[name=L]').fill('20');
+  // Both moves are made from inside the page, 150ms apart on its own timers, so the second
+  // lands mid-transition regardless of how long a round trip from the test takes.
+  await page.evaluate(
+    ([first, second, gapMs]) =>
+      new Promise<void>((resolve) => {
+        const slider = document.querySelector('input[name=L]');
+        if (!(slider instanceof HTMLInputElement)) {
+          throw new Error('input[name=L] is missing');
+        }
+        const move = (value: string) => {
+          slider.value = value;
+          slider.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+        move(first);
+        setTimeout(() => {
+          move(second);
+          resolve();
+        }, gapMs);
+      }),
+    ['30', '20', 150] as const,
+  );
   const first = await superseded;
   expect(first.to.L).toBe(30);
   expect(first.duration_ms).toBeLessThan(400);
   const last = await arrival;
   expect(last.to.L).toBe(20);
-  expect(last.from.L).toBeGreaterThanOrEqual(12);
-  expect(last.from.L).toBeLessThanOrEqual(30);
+  expect(last.from.L).toBeGreaterThan(12); // it set off from partway up, not from where it started
+  expect(last.from.L).toBeLessThan(30);
 });
 
 test('dragging on the canvas orbits the camera', async ({ page, boot }) => {

@@ -21,8 +21,10 @@ function element<T extends Element>(selector: string, kind: new () => T): T {
   return found;
 }
 
+// A window can report no size at all while hidden; the stage is drawn as one pixel then,
+// so every value derived from the viewport stays finite.
 function viewport(win: Window): Viewport {
-  return { width: win.innerWidth, height: win.innerHeight, pixelRatio: win.devicePixelRatio };
+  return { width: Math.max(1, win.innerWidth), height: Math.max(1, win.innerHeight), pixelRatio: win.devicePixelRatio };
 }
 
 function statusText(gpu: GpuDescriptor): string {
@@ -81,31 +83,48 @@ function present(config: ModelConfig): number {
   return total;
 }
 
+// The sliders are the person's input edge; the config is what they currently name.
+function current(): ModelConfig {
+  return gpt2(sliders.L.valueAsNumber, sliders.H.valueAsNumber);
+}
+
 const started = performance.now();
 const preset: PresetName = 'GPT-2 small';
-const initial = presets[preset];
 setRange(sliders.H, sliderRange.H);
 setRange(sliders.L, sliderRange.L);
-sliders.H.value = String(initial.H);
-sliders.L.value = String(initial.L);
-const parameters = present(initial);
+sliders.H.value = String(presets[preset].H);
+sliders.L.value = String(presets[preset].L);
+present(current());
 
-const { renderer, stage } = await mount(await probeGpu(navigator), canvas, window, {
-  initial: towerShape(initial),
-  envelope: sliderEnvelope,
-  transitionMs,
-  telemetry,
-});
-status.textContent = statusText(renderer);
-telemetry.emit({ kind: 'boot', renderer, duration_ms: performance.now() - started, preset, config: initial, parameters });
+// The sliders work from the first paint: until the renderer is up they drive the dark stage,
+// and the tower boots at whatever config they hold by then.
+let stage: Stage = darkStage;
 
 // [LAW:nothing-unseen] a slider move is a unit of work: the config it named and the ledger's
 // answer land on one event. The stage's own transition event follows when the tower arrives.
 function reshape(): void {
-  const config = gpt2(sliders.L.valueAsNumber, sliders.H.valueAsNumber);
+  const config = current();
   const parameters = present(config);
   stage.reshape(towerShape(config));
   telemetry.emit({ kind: 'reshape', config, parameters });
 }
 sliders.H.addEventListener('input', reshape);
 sliders.L.addEventListener('input', reshape);
+
+const config = current();
+const mounted = await mount(await probeGpu(navigator), canvas, window, {
+  initial: towerShape(config),
+  envelope: sliderEnvelope,
+  transitionMs,
+  telemetry,
+});
+stage = mounted.stage;
+status.textContent = statusText(mounted.renderer);
+telemetry.emit({
+  kind: 'boot',
+  renderer: mounted.renderer,
+  duration_ms: performance.now() - started,
+  preset,
+  config,
+  parameters: parameterLedger(config).total,
+});

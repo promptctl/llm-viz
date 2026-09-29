@@ -139,7 +139,7 @@ export async function mountStage(
   // neither zoom into a slab nor lose the tower past the far plane.
   const camera = new PerspectiveCamera(50, viewport.width / viewport.height);
   const target = new Vector3(0, envelope.height / 3, 0);
-  let fitted = fitDistance(camera.fov, camera.aspect, envelope);
+  const fitted = fitDistance(camera.fov, camera.aspect, envelope);
   camera.position.set(0.55, 0.35, 0.76).normalize().multiplyScalar(fitted).add(target);
   const controls = new OrbitControls(camera, canvas);
   controls.target.copy(target);
@@ -159,13 +159,13 @@ export async function mountStage(
     resize({ width, height, pixelRatio }) {
       renderer.setPixelRatio(pixelRatio);
       renderer.setSize(width, height, false);
+      // Keep the envelope in frame at the new aspect while preserving how far the person has
+      // dollied relative to the fit. [LAW:one-source-of-truth] the fit before is derived from
+      // the camera's own aspect, not remembered.
+      const before = fitDistance(camera.fov, camera.aspect, envelope);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      // Keep the envelope in frame at the new aspect while preserving how far the person has
-      // dollied relative to the fit.
-      const refitted = fitDistance(camera.fov, camera.aspect, envelope);
-      camera.position.sub(target).multiplyScalar(refitted / fitted).add(target);
-      fitted = refitted;
+      camera.position.sub(target).multiplyScalar(fitDistance(camera.fov, camera.aspect, envelope) / before).add(target);
       controls.update();
     },
     reshape(shape) {
