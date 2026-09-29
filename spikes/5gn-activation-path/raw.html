@@ -1,0 +1,37 @@
+<!doctype html><meta charset="utf-8"><title>raw path</title><pre id="out"></pre>
+<script type="module">
+// Hand-rolled path, load stage only: fetch GPT-2 small safetensors, parse the header, put every
+// tensor in its own GPUBuffer. No forward pass here (the ticket forbids building it).
+const URL_ = 'https://huggingface.co/openai-community/gpt2/resolve/main/model.safetensors';
+const r = { path: 'raw' };
+const adapter = await navigator.gpu.requestAdapter();
+const device = await adapter.requestDevice();
+r.adapter = adapter.info?.description ?? adapter.info?.vendor;
+r.maxBufferSize = device.limits.maxBufferSize;
+const cache = await caches.open('raw-bench');
+const t0 = performance.now();
+let resp = await cache.match(URL_);
+r.from_cache = !!resp;
+if (!resp) { resp = await fetch(URL_); await cache.put(URL_, resp.clone()); }
+const buf = await resp.arrayBuffer();
+r.fetch_ms = Math.round(performance.now() - t0);
+r.bytes = buf.byteLength;
+const t1 = performance.now();
+const n = Number(new DataView(buf).getBigUint64(0, true));
+const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, n)));
+delete header.__metadata__;
+const base = 8 + n; let tensors = 0, gpuBytes = 0; const bufs = [];
+for (const [name, t] of Object.entries(header)) {
+  const [s, e] = t.data_offsets; const len = e - s; const padded = (len + 3) & ~3;
+  const g = device.createBuffer({ size: padded, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  device.queue.writeBuffer(g, 0, buf, base + s, len);
+  bufs.push(g); tensors++; gpuBytes += padded;
+}
+await device.queue.onSubmittedWorkDone();
+r.upload_ms = Math.round(performance.now() - t1);
+r.tensors = tensors; r.gpu_bytes = gpuBytes; r.dtype = header['wte.weight'].dtype;
+r.load_ms = r.fetch_ms + r.upload_ms;
+try { r.ua_memory_bytes = (await performance.measureUserAgentSpecificMemory()).bytes; } catch (e) { r.ua_memory_error = String(e); }
+r.js_heap = performance.memory?.usedJSHeapSize;
+window.result = r; console.log('RESULT ' + JSON.stringify(r));
+</script>

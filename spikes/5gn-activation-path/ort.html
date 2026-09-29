@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8"><title>ort path</title><pre id="out"></pre>
+<script type="module">
+import { AutoTokenizer, AutoModelForCausalLM, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0';
+const q = new URLSearchParams(location.search);
+const dtype = q.get('dtype') ?? 'fp32';
+env.allowLocalModels = false;
+const r = { path: 'ort', dtype };
+const t0 = performance.now();
+const tok = await AutoTokenizer.from_pretrained('Xenova/gpt2');
+const model = await AutoModelForCausalLM.from_pretrained('Xenova/gpt2', { device: 'webgpu', dtype });
+r.load_ms = Math.round(performance.now() - t0);
+const inputs = tok('The quick brown fox jumps over the lazy dog because');
+r.tokens = inputs.input_ids.dims[1];
+const t1 = performance.now();
+let out = await model(inputs);
+r.first_forward_ms = Math.round(performance.now() - t1);
+r.outputs = Object.keys(out);
+r.logits_dims = out.logits.dims;
+const t2 = performance.now();
+for (let i = 0; i < 5; i++) out = await model(inputs);
+r.warm_forward_ms = Math.round((performance.now() - t2) / 5);
+const logits = out.logits.data; const V = 50257; const last = (r.tokens - 1) * V;
+let best = 0; for (let i = 1; i < V; i++) if (logits[last + i] > logits[last + best]) best = i;
+r.top1 = tok.decode([best]);
+try { r.ua_memory_bytes = (await performance.measureUserAgentSpecificMemory()).bytes; } catch (e) { r.ua_memory_error = String(e); }
+r.js_heap = performance.memory?.usedJSHeapSize;
+window.result = r; console.log('RESULT ' + JSON.stringify(r));
+</script>

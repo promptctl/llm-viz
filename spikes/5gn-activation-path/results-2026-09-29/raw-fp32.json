@@ -1,0 +1,4 @@
+[
+ {"run": "cold", "rss_delta_bytes": 2496020480, "rss_after_bytes": 3562176512, "path": "raw", "maxBufferSize": 268435456, "from_cache": false, "fetch_ms": 26444, "bytes": 548105171, "upload_ms": 279, "tensors": 160, "gpu_bytes": 548090880, "dtype": "F32", "load_ms": 26723, "ua_memory_bytes": 549142606, "js_heap": 549382105},
+ {"run": "warm", "rss_delta_bytes": 1902559232, "rss_after_bytes": 2985934848, "path": "raw", "maxBufferSize": 268435456, "from_cache": true, "fetch_ms": 467, "bytes": 548105171, "upload_ms": 243, "tensors": 160, "gpu_bytes": 548090880, "dtype": "F32", "load_ms": 710, "ua_memory_bytes": 549142402, "js_heap": 549381925}
+]
