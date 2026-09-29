@@ -1,5 +1,12 @@
 import { test as base, expect, type Page } from '@playwright/test';
-import type { AppEvent, BootEvent } from '../src/telemetry';
+import type { BootEvent } from '../src/telemetry';
+
+declare global {
+  interface Window {
+    // Present only after recordCanvasContexts(page) installed the recorder.
+    canvasContexts?: string[];
+  }
+}
 
 // [LAW:single-enforcer] "the console is clean" is asserted here, once, for every test that
 // uses this `test`; no spec repeats it.
@@ -22,11 +29,14 @@ export const test = base.extend<{ cleanConsole: void }>({
 
 export { expect };
 
+// One round-trip: polls until the boot event exists and returns it, so a Vite full reload
+// between "it exists" and "read it" cannot strand the read on a destroyed context.
 export async function bootEvent(page: Page): Promise<BootEvent> {
-  await page.waitForFunction(() => window.llmviz.events.some((e: AppEvent) => e.kind === 'boot'));
-  const events = await page.evaluate(() => window.llmviz.events);
-  const boot = events.find((e): e is BootEvent => e.kind === 'boot');
-  if (boot === undefined) throw new Error('boot event vanished between waitForFunction and evaluate');
+  const handle = await page.waitForFunction(
+    () => ('llmviz' in window ? (window.llmviz.events.find((e) => e.kind === 'boot') ?? null) : null),
+  );
+  const boot = await handle.jsonValue();
+  if (boot === null) throw new Error('waitForFunction resolved without a boot event');
   return boot;
 }
 
@@ -35,7 +45,7 @@ export async function bootEvent(page: Page): Promise<BootEvent> {
 export async function recordCanvasContexts(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const requested: string[] = [];
-    (window as Window & { canvasContexts?: string[] }).canvasContexts = requested;
+    window.canvasContexts = requested;
     const original = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, ...args: Parameters<typeof original>) {
       requested.push(String(args[0]));
@@ -44,6 +54,12 @@ export async function recordCanvasContexts(page: Page): Promise<void> {
   });
 }
 
+// [LAW:no-silent-failure] a spec that forgot the recorder gets an error, not a vacuous [].
 export function canvasContexts(page: Page): Promise<string[]> {
-  return page.evaluate(() => (window as Window & { canvasContexts?: string[] }).canvasContexts ?? []);
+  return page.evaluate(() => {
+    if (window.canvasContexts === undefined) {
+      throw new Error('recordCanvasContexts(page) was not called before navigation');
+    }
+    return window.canvasContexts;
+  });
 }

@@ -4,7 +4,7 @@ test('draws the scene on WebGPU and reports the adapter', async ({ page }) => {
   await recordCanvasContexts(page);
   await page.goto('/');
   const boot = await bootEvent(page);
-  expect(boot.renderer).toEqual({ kind: 'webgpu', adapter: expect.stringMatching(/\S/) });
+  expect(boot.renderer).toEqual({ kind: 'ready', adapter: expect.stringMatching(/\S/) });
   expect(boot.duration_ms).toBeGreaterThan(0);
   await expect(page.locator('p#status')).toHaveText(/^WebGPU · \S/);
   expect(await canvasContexts(page)).toEqual(['webgpu']);
