@@ -13,16 +13,24 @@ export type ModelShape = {
 declare const configured: unique symbol;
 
 // [LAW:parse-dont-validate] the stamp. Only modelConfig() produces one, so a consumer
-// that takes a ModelConfig knows H divides by heads without asking, and reads dHead
-// instead of dividing again.
+// that takes a ModelConfig knows every dimension is a positive integer and H divides by
+// heads without asking, and reads dHead instead of dividing again.
 export type ModelConfig = ModelShape & { readonly dHead: number; readonly [configured]: true };
 
-// [LAW:single-enforcer] H divisible by heads is checked here and nowhere else.
-export function modelConfig(shape: ModelShape): ModelConfig {
-  if (shape.H % shape.heads !== 0) {
-    throw new Error(`H=${shape.H} is not divisible by heads=${shape.heads}`);
+// [LAW:single-enforcer] the shape's invariants are checked here and nowhere else. The
+// config is rebuilt from the six named fields so a wider object (a checkpoint header)
+// leaves nothing extra inside the one configuration.
+export function modelConfig({ L, H, heads, dFf, V, nCtx }: ModelShape): ModelConfig {
+  for (const [name, value] of Object.entries({ L, H, heads, dFf, V, nCtx })) {
+    if (!Number.isInteger(value) || value <= 0) {
+      throw new Error(`${name}=${value} is not a positive integer`);
+    }
   }
-  return { ...shape, dHead: shape.H / shape.heads } as ModelConfig;
+  if (H % heads !== 0) {
+    throw new Error(`H=${H} is not divisible by heads=${heads}`);
+  }
+  const config: ModelShape & { dHead: number } = { L, H, heads, dFf, V, nCtx, dHead: H / heads };
+  return config as ModelConfig;
 }
 
 // [LAW:one-type-per-behavior] the GPT-2 family differs only in L, H and heads; the rest
