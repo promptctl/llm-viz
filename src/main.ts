@@ -1,11 +1,11 @@
 // [LAW:effects-at-boundaries] the edge: the only module that touches document, window,
 // navigator and console. Everything it calls takes those as values.
-import { presets, type ModelConfig, type PresetName } from './config';
+import { gpt2, presets, type ModelConfig, type PresetName } from './config';
 import { errorMessage } from './errors';
 import { probeGpu, type Gpu, type GpuDescriptor } from './gpu';
 import { parameterLedger } from './ledger';
 import { darkStage, mountStage, type Stage, type StageOptions, type Viewport } from './scene';
-import { sliderConfig, sliderEnvelope, sliderRange, type Range } from './sliders';
+import { sliderEnvelope, sliderRange, type Range } from './sliders';
 import { createTelemetry } from './telemetry';
 import { towerShape } from './tower';
 
@@ -100,9 +100,9 @@ status.textContent = statusText(renderer);
 telemetry.emit({ kind: 'boot', renderer, duration_ms: performance.now() - started, preset, config: initial, parameters });
 
 // [LAW:nothing-unseen] a slider move is a unit of work: the config it named and the ledger's
-// answer land on one event. The stage's own settled event follows when the tower arrives.
+// answer land on one event. The stage's own transition event follows when the tower arrives.
 function reshape(): void {
-  const config = sliderConfig(sliders.H.valueAsNumber, sliders.L.valueAsNumber);
+  const config = gpt2(sliders.L.valueAsNumber, sliders.H.valueAsNumber);
   const parameters = present(config);
   stage.reshape(towerShape(config));
   telemetry.emit({ kind: 'reshape', config, parameters });

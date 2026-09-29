@@ -41,12 +41,19 @@ export const test = base.extend<Fixtures>({
 
 export { expect };
 
-// Resolves with the next event of `kind` to reach the console. Register it before the action
-// that causes the event, so the event cannot slip past between the action and the wait.
-export function nextEvent<K extends AppEvent['kind']>(page: Page, kind: K): Promise<Extract<AppEvent, { kind: K }>> {
-  return page
-    .waitForEvent('console', (m) => parseEvent(m.text())?.kind === kind)
-    .then((m) => parseEvent(m.text()) as Extract<AppEvent, { kind: K }>);
+// Resolves with the next event of `kind` (that `where` accepts) to reach the console. Register
+// it before the action that causes the event, so the event cannot slip past between the action
+// and the wait.
+export function nextEvent<K extends AppEvent['kind']>(
+  page: Page,
+  kind: K,
+  where: (event: Extract<AppEvent, { kind: K }>) => boolean = () => true,
+): Promise<Extract<AppEvent, { kind: K }>> {
+  const matches = (text: string): Extract<AppEvent, { kind: K }> | null => {
+    const event = parseEvent(text);
+    return event?.kind === kind && where(event as Extract<AppEvent, { kind: K }>) ? (event as Extract<AppEvent, { kind: K }>) : null;
+  };
+  return page.waitForEvent('console', (m) => matches(m.text()) !== null).then((m) => matches(m.text())!);
 }
 
 export type LitBounds = { pixels: number; width: number; height: number };

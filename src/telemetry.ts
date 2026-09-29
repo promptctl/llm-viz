@@ -21,16 +21,18 @@ export type ReshapeEvent = {
   parameters: number;
 };
 
-// The tower on screen reached a shape. duration_ms is measured on the stage's clock from
-// the reshape that asked for it; for the first shape it is the time from the page's time
-// origin to its first frame.
-export type SettledEvent = {
-  kind: 'settled';
-  shape: TowerShape;
+// A transition of the tower on screen closed: it settled at `to`, or a reshape superseded it
+// on its way there. duration_ms is measured on the stage's clock from the reshape that
+// started it; for the first shape it is the time from the page's time origin to its first frame.
+export type TransitionEvent = {
+  kind: 'transition';
+  from: TowerShape;
+  to: TowerShape;
+  outcome: 'settled' | 'superseded';
   duration_ms: number;
 };
 
-export type AppEvent = BootEvent | ReshapeEvent | SettledEvent;
+export type AppEvent = BootEvent | ReshapeEvent | TransitionEvent;
 
 export type Telemetry = { emit(event: AppEvent): void };
 

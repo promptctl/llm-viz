@@ -35,8 +35,18 @@ export function forEachSlab({ L, H, V, nCtx }: TowerShape, visit: SlabVisitor): 
   }
 }
 
-export function towerHeight({ L, H, V, nCtx }: TowerShape): number {
-  return V / H + nCtx / H + layerHeight * L;
+// How many slabs forEachSlab visits for a shape: the two fixed ones and one per started layer.
+export function slabCount(L: number): number {
+  return 2 + Math.ceil(L);
+}
+
+// [LAW:one-source-of-truth] the top of the last slab forEachSlab lays, not a second formula.
+export function towerHeight(shape: TowerShape): number {
+  let top = 0;
+  forEachSlab(shape, (_kind, _index, y, _width, height) => {
+    top = y + height;
+  });
+  return top;
 }
 
 // A box the tower fits in; the footprint is square, so width serves as depth too.

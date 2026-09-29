@@ -1,5 +1,5 @@
-import { gpt2, gpt2HeadWidth, type ModelConfig } from './config';
-import { towerHeight, towerShape, type Extent } from './tower';
+import { gpt2, gpt2HeadWidth } from './config';
+import { slabCount, towerHeight, towerShape, type Extent } from './tower';
 
 export type Range = { readonly min: number; readonly max: number; readonly step: number };
 
@@ -11,15 +11,11 @@ export const sliderRange = {
   L: { min: 1, max: 48, step: 1 },
 } as const satisfies Record<'H' | 'L', Range>;
 
-export function sliderConfig(H: number, L: number): ModelConfig {
-  return gpt2(L, H);
-}
-
 // The box every reachable tower fits in, so the camera is framed once and growth stays in
 // frame. Height peaks at the most layers and the narrowest H: layers add height linearly
 // in L, and the floor's height V/H falls as H grows.
-export const sliderEnvelope: Extent & { readonly layers: number } = {
+export const sliderEnvelope: Extent & { readonly slabs: number } = {
   width: sliderRange.H.max,
-  height: towerHeight(towerShape(sliderConfig(sliderRange.H.min, sliderRange.L.max))),
-  layers: sliderRange.L.max,
+  height: towerHeight(towerShape(gpt2(sliderRange.L.max, sliderRange.H.min))),
+  slabs: slabCount(sliderRange.L.max),
 };

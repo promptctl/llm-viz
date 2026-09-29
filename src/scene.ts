@@ -15,7 +15,7 @@ import {
   WebGPURenderer,
 } from 'three/webgpu';
 import { isOver, sample, transition, type Transition } from './clock';
-import type { Telemetry } from './telemetry';
+import type { Telemetry, TransitionEvent } from './telemetry';
 import { forEachSlab, type Extent, type SlabKind, type TowerShape } from './tower';
 
 export type Viewport = { width: number; height: number; pixelRatio: number };
@@ -27,8 +27,8 @@ export type Stage = {
 
 export type StageOptions = {
   initial: TowerShape;
-  // The box the camera frames once; `layers` bounds the slab count, so nothing allocates later.
-  envelope: Extent & { readonly layers: number };
+  // The box the camera frames once; `slabs` bounds the instance count, so nothing allocates later.
+  envelope: Extent & { readonly slabs: number };
   transitionMs: number;
   telemetry: Telemetry;
 };
@@ -38,11 +38,15 @@ export type StageOptions = {
 export const darkStage: Stage = { resize() {}, reshape() {} };
 
 // The tower is either on its way to a shape or at one. The transition is the unit of work
-// the settled event closes, so the two states are the enum and nothing else branches on it.
+// the transition event closes, so the two states are the enum and nothing else branches on it.
 type Motion = { kind: 'moving'; transition: Transition<TowerShape> } | { kind: 'settled'; shape: TowerShape };
 
 function shapeAt(motion: Motion, now: number): TowerShape {
   return motion.kind === 'moving' ? sample(motion.transition, now) : motion.shape;
+}
+
+function closed({ from, to, startedAt }: Transition<TowerShape>, outcome: TransitionEvent['outcome'], now: number): TransitionEvent {
+  return { kind: 'transition', from, to, outcome, duration_ms: now - startedAt };
 }
 
 // PROJECT.md "The color language" gives the stream and the writes their colors; slabs are
@@ -66,21 +70,12 @@ function shadeOf(kind: SlabKind, index: number): Color {
   }
 }
 
-// Place the camera so the envelope's bounding sphere fills the narrower field of view,
-// from a raised three-quarter angle that shows top faces as well as sides. The orbit
-// target sits a third of the way up: only the narrowest towers reach the envelope's top.
-function frame(camera: PerspectiveCamera, envelope: Extent): Vector3 {
-  const target = new Vector3(0, envelope.height / 3, 0);
+// The distance at which the envelope's bounding sphere fills the narrower field of view.
+function fitDistance(fov: number, aspect: number, envelope: Extent): number {
   const radius = 0.5 * Math.hypot(envelope.width, envelope.height, envelope.width);
-  const vertical = (camera.fov * Math.PI) / 180;
-  const horizontal = 2 * Math.atan(Math.tan(vertical / 2) * camera.aspect);
-  const distance = radius / Math.sin(Math.min(vertical, horizontal) / 2);
-  camera.near = distance / 100;
-  camera.far = distance * 10;
-  camera.position.set(0.55, 0.35, 0.76).normalize().multiplyScalar(distance).add(target);
-  camera.lookAt(target);
-  camera.updateProjectionMatrix();
-  return target;
+  const vertical = (fov * Math.PI) / 180;
+  const horizontal = 2 * Math.atan(Math.tan(vertical / 2) * aspect);
+  return radius / Math.sin(Math.min(vertical, horizontal) / 2);
 }
 
 // The room every later slice draws into. Takes the GPUDevice the probe produced: handing
@@ -112,12 +107,14 @@ export async function mountStage(
 
   // [LAW:one-type-per-behavior] every slab is one instance of one box; kind and index only
   // pick its transform and shade.
-  const capacity = envelope.layers + 2;
-  const slabs = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial({ roughness: 0.55, metalness: 0.15 }), capacity);
+  const slabs = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial({ roughness: 0.55, metalness: 0.15 }), envelope.slabs);
   slabs.instanceMatrix.setUsage(DynamicDrawUsage);
-  const shades = new InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
+  const shades = new InstancedBufferAttribute(new Float32Array(envelope.slabs * 3), 3);
   shades.setUsage(DynamicDrawUsage);
   slabs.instanceColor = shades;
+  // One mesh that is the whole picture: three would otherwise cull it by a bounding sphere
+  // computed from the first layout and never again.
+  slabs.frustumCulled = false;
   scene.add(slabs);
 
   const slab = new Object3D();
@@ -136,15 +133,26 @@ export async function mountStage(
     shades.needsUpdate = true;
   }
 
-  const camera = new PerspectiveCamera(50, viewport.width / viewport.height, 1, 1000);
+  // Frame the envelope from a raised three-quarter angle that shows top faces as well as
+  // sides, with the orbit target a third of the way up: only the narrowest towers reach the
+  // envelope's top. Dolly limits and clip planes are the same fit, scaled, so the person can
+  // neither zoom into a slab nor lose the tower past the far plane.
+  const camera = new PerspectiveCamera(50, viewport.width / viewport.height);
+  const target = new Vector3(0, envelope.height / 3, 0);
+  let fitted = fitDistance(camera.fov, camera.aspect, envelope);
+  camera.position.set(0.55, 0.35, 0.76).normalize().multiplyScalar(fitted).add(target);
   const controls = new OrbitControls(camera, canvas);
-  controls.target.copy(frame(camera, envelope));
+  controls.target.copy(target);
+  controls.minDistance = fitted / 20;
+  controls.maxDistance = fitted * 4;
+  camera.near = controls.minDistance / 10;
+  camera.far = controls.maxDistance * 2;
   controls.update();
 
-  // [LAW:no-ambient-temporal-coupling] `now` is the animation loop's timestamp and the only
-  // clock the tower moves on. The first shape is a transition already over at the origin, so
-  // its settled event's duration is the time to the first frame.
-  let now = 0;
+  // [LAW:no-ambient-temporal-coupling] `now` is the animation loop's timestamp, on the same
+  // timeline as performance.now(), and the only clock the tower moves on. The first shape is
+  // a transition already over at the origin, so its event's duration is the time to first frame.
+  let now = performance.now();
   let motion: Motion = { kind: 'moving', transition: transition(initial, initial, 0, 1) };
 
   const stage: Stage = {
@@ -153,9 +161,19 @@ export async function mountStage(
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      // Keep the envelope in frame at the new aspect while preserving how far the person has
+      // dollied relative to the fit.
+      const refitted = fitDistance(camera.fov, camera.aspect, envelope);
+      camera.position.sub(target).multiplyScalar(refitted / fitted).add(target);
+      fitted = refitted;
+      controls.update();
     },
     reshape(shape) {
-      // Starts from wherever the tower is now, so a slider dragged mid-transition never jumps.
+      // [LAW:nothing-unseen] a transition still in flight closes as superseded before the new
+      // one starts from wherever the tower is now, so a slider dragged mid-transition never jumps.
+      if (motion.kind === 'moving') {
+        telemetry.emit(closed(motion.transition, 'superseded', now));
+      }
       motion = { kind: 'moving', transition: transition(shapeAt(motion, now), shape, now, transitionMs) };
     },
   };
@@ -163,14 +181,17 @@ export async function mountStage(
 
   renderer.setAnimationLoop((time: number) => {
     now = time;
-    layout(shapeAt(motion, now));
+    // The instance buffers are rewritten only while the tower moves; the last moving frame
+    // lays out the shape it settles at, since sample() clamps to `to`.
+    if (motion.kind === 'moving') {
+      layout(sample(motion.transition, now));
+    }
     renderer.render(scene, camera);
     // [LAW:nothing-unseen] the transition is the unit of work; its event closes here, once,
     // on the frame that first drew the shape it was asked for.
     if (motion.kind === 'moving' && isOver(motion.transition, now)) {
-      const { to, startedAt } = motion.transition;
-      motion = { kind: 'settled', shape: to };
-      telemetry.emit({ kind: 'settled', shape: to, duration_ms: now - startedAt });
+      telemetry.emit(closed(motion.transition, 'settled', now));
+      motion = { kind: 'settled', shape: motion.transition.to };
     }
   });
   return stage;

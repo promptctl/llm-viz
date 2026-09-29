@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { presets } from './config';
 import { parameterLedger } from './ledger';
-import { forEachSlab, layerHeight, towerHeight, towerShape, type SlabKind } from './tower';
+import { forEachSlab, layerHeight, slabCount, towerHeight, towerShape, type SlabKind } from './tower';
 
 type Slab = { kind: SlabKind; index: number; y: number; width: number; height: number; depth: number };
 
@@ -46,6 +46,8 @@ describe('forEachSlab', () => {
   it('draws a fractional L as a top layer that is only as tall as the fraction that exists', () => {
     const layers = slabs({ ...small, L: 2.5 }).filter((s) => s.kind === 'layer');
     expect(layers.map((s) => s.height)).toEqual([12, 12, 6]);
+    expect(slabs({ ...small, L: 2.5 })).toHaveLength(slabCount(2.5));
+    expect(slabs(small)).toHaveLength(slabCount(12));
   });
 
   it('renders L=1 at the narrowest H as one layer on a floor taller than itself', () => {

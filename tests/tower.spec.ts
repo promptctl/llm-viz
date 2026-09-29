@@ -1,31 +1,34 @@
-import { presets } from '../src/config';
+import { gpt2, presets } from '../src/config';
 import { parameterLedger } from '../src/ledger';
-import { sliderConfig } from '../src/sliders';
 import type { Page } from '@playwright/test';
-import type { BootEvent, ReshapeEvent, SettledEvent } from '../src/telemetry';
+import type { BootEvent, ReshapeEvent, TransitionEvent } from '../src/telemetry';
 import { expect, litBounds, nextEvent, test, type LitBounds } from './harness';
 
 function shown(total: number): string {
   return `${total.toLocaleString('en-US')} parameters`;
 }
 
-// Opens the page and resolves once the first tower has settled on screen.
-async function open(page: Page, boot: Promise<BootEvent>): Promise<{ boot: BootEvent; settled: SettledEvent }> {
-  const settled = nextEvent(page, 'settled');
-  await page.goto('/');
-  return { boot: await boot, settled: await settled };
+function settled(page: Page): Promise<TransitionEvent> {
+  return nextEvent(page, 'transition', (event) => event.outcome === 'settled');
 }
 
-type Dragged = { reshape: ReshapeEvent; settled: SettledEvent; lit: LitBounds };
+// Opens the page and resolves once the first tower has settled on screen.
+async function open(page: Page, boot: Promise<BootEvent>): Promise<{ boot: BootEvent; settled: TransitionEvent }> {
+  const first = settled(page);
+  await page.goto('/');
+  return { boot: await boot, settled: await first };
+}
+
+type Dragged = { reshape: ReshapeEvent; settled: TransitionEvent; lit: LitBounds };
 
 // Moves one slider and resolves once the tower has settled at the shape it named.
 async function drag(page: Page, slider: 'H' | 'L', value: number): Promise<Dragged> {
   const reshape = nextEvent(page, 'reshape');
-  const settled = nextEvent(page, 'settled');
+  const arrival = settled(page);
   await page.locator(`input[name=${slider}]`).fill(String(value));
-  const events = { reshape: await reshape, settled: await settled };
+  const events = { reshape: await reshape, settled: await arrival };
   expect(events.reshape.config[slider]).toBe(value);
-  expect(events.settled.shape[slider]).toBe(value);
+  expect(events.settled.to[slider]).toBe(value);
   expect(events.settled.duration_ms).toBeGreaterThanOrEqual(400);
   return { ...events, lit: await litBounds(page) };
 }
@@ -37,7 +40,7 @@ function differences(values: number[]): number[] {
 test('boots into GPT-2 small: ledger, sliders, boot and settled events, and a lit tower', async ({ page, boot }) => {
   const events = await open(page, boot);
   expect(events.boot).toMatchObject({ preset: 'GPT-2 small', config: { L: 12, H: 768 }, parameters: 124_439_808 });
-  expect(events.settled).toMatchObject({ shape: { L: 12, H: 768, V: 50257, nCtx: 1024 } });
+  expect(events.settled).toMatchObject({ from: { L: 12, H: 768 }, to: { L: 12, H: 768, V: 50257, nCtx: 1024 } });
   await expect(page.locator('p#ledger')).toHaveText(shown(124_439_808));
   await expect(page.locator('input[name=H]')).toHaveValue('768');
   await expect(page.locator('input[name=L]')).toHaveValue('12');
@@ -52,7 +55,7 @@ test('dragging H widens the tower and the count climbs on a curve', async ({ pag
   const totals: number[] = [];
   for (const H of [512, 1024, 1536]) {
     const { reshape, lit } = await drag(page, 'H', H);
-    expect(reshape).toMatchObject({ config: { H, L: 12 }, parameters: parameterLedger(sliderConfig(H, 12)).total });
+    expect(reshape).toMatchObject({ config: { H, L: 12 }, parameters: parameterLedger(gpt2(12, H)).total });
     await expect(page.locator('p#ledger')).toHaveText(shown(reshape.parameters));
     widths.push(lit.width);
     totals.push(reshape.parameters);
@@ -83,7 +86,7 @@ test('the smallest shape and the XL shape both render', async ({ page, boot }) =
   await drag(page, 'L', 1);
   const smallest = (await drag(page, 'H', 64)).lit;
   expect(smallest.pixels).toBeGreaterThan(100);
-  await expect(page.locator('p#ledger')).toHaveText(shown(parameterLedger(sliderConfig(64, 1)).total));
+  await expect(page.locator('p#ledger')).toHaveText(shown(parameterLedger(gpt2(1, 64)).total));
 
   await drag(page, 'H', 1600);
   const xl = (await drag(page, 'L', 48)).lit;
@@ -91,12 +94,19 @@ test('the smallest shape and the XL shape both render', async ({ page, boot }) =
   await expect(page.locator('p#ledger')).toHaveText(shown(parameterLedger(presets['GPT-2 XL']).total));
 });
 
-test('a slider moved mid-transition settles once, at the last shape asked for', async ({ page, boot }) => {
+test('a slider moved mid-transition supersedes the first transition and settles at the last shape', async ({ page, boot }) => {
   await open(page, boot);
-  const settled = nextEvent(page, 'settled');
+  const superseded = nextEvent(page, 'transition', (event) => event.outcome === 'superseded');
+  const arrival = settled(page);
   await page.locator('input[name=L]').fill('30');
   await page.locator('input[name=L]').fill('20');
-  expect((await settled).shape.L).toBe(20);
+  const first = await superseded;
+  expect(first.to.L).toBe(30);
+  expect(first.duration_ms).toBeLessThan(400);
+  const last = await arrival;
+  expect(last.to.L).toBe(20);
+  expect(last.from.L).toBeGreaterThanOrEqual(12);
+  expect(last.from.L).toBeLessThanOrEqual(30);
 });
 
 test('dragging on the canvas orbits the camera', async ({ page, boot }) => {
