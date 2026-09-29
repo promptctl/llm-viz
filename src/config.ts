@@ -33,19 +33,23 @@ export function modelConfig({ L, H, heads, dFf, V, nCtx }: ModelShape): ModelCon
   return config as ModelConfig;
 }
 
-// [LAW:one-type-per-behavior] the GPT-2 family differs only in L, H and heads; the rest
-// of the shape is shared by every member.
-function gpt2(L: number, H: number, heads: number): ModelConfig {
-  return modelConfig({ L, H, heads, dFf: 4 * H, V: 50257, nCtx: 1024 });
+// Every GPT-2 head is 64 wide, so the family is fixed by L and H alone: heads is H / 64.
+export const gpt2HeadWidth = 64;
+
+// [LAW:one-type-per-behavior] the GPT-2 family differs only in L and H; the rest of the
+// shape is shared by every member. An H that is not a whole number of heads fails in
+// modelConfig, the single enforcer, as a non-integer head count.
+export function gpt2(L: number, H: number): ModelConfig {
+  return modelConfig({ L, H, heads: H / gpt2HeadWidth, dFf: 4 * H, V: 50257, nCtx: 1024 });
 }
 
 // Presets the ledger anchors to (PROJECT.md "The what-if ledger"). Only small runs live;
 // the others shape the tower and fill the ledger.
 export const presets = {
-  'GPT-2 small': gpt2(12, 768, 12),
-  'GPT-2 medium': gpt2(24, 1024, 16),
-  'GPT-2 large': gpt2(36, 1280, 20),
-  'GPT-2 XL': gpt2(48, 1600, 25),
+  'GPT-2 small': gpt2(12, 768),
+  'GPT-2 medium': gpt2(24, 1024),
+  'GPT-2 large': gpt2(36, 1280),
+  'GPT-2 XL': gpt2(48, 1600),
 } as const satisfies Record<string, ModelConfig>;
 
 export type PresetName = keyof typeof presets;

@@ -9,11 +9,21 @@
       html, body { margin: 0; height: 100%; background: #05060a; color: #9fb3c8; font: 14px/1.4 ui-monospace, Menlo, monospace; }
       canvas#stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
       p#status { position: fixed; top: 12px; left: 16px; margin: 0; white-space: pre-wrap; }
+      form#controls { position: fixed; bottom: 16px; left: 16px; display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; width: 320px; }
+      form#controls label { display: contents; }
+      form#controls input { width: 100%; margin: 0; }
+      form#controls output { min-width: 4ch; text-align: right; }
+      p#ledger { position: fixed; bottom: 16px; right: 16px; margin: 0; font-size: 18px; color: #e6f1ff; }
     </style>
   </head>
   <body>
     <canvas id="stage"></canvas>
     <p id="status"></p>
+    <form id="controls">
+      <label>H <input type="range" name="H" /> <output name="H"></output></label>
+      <label>L <input type="range" name="L" /> <output name="L"></output></label>
+    </form>
+    <p id="ledger"></p>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
