@@ -2,11 +2,10 @@
 // the browser. Not part of `pnpm test`. From the repo root, with the dev deps installed:
 //   node spikes/5gn-activation-path/run.mjs raw              # safetensors -> GPUBuffers, no forward
 //   node spikes/5gn-activation-path/run.mjs ort dtype=fp32   # transformers.js + onnxruntime-web (or fp16)
-// Each run prints a cold and a Cache-API-warm pass as JSON. A profile-* dir beside this file is the
-// persistent browser profile; delete it for a true cold run. Unset SSL_CERT_FILE first if your shell
-// pins one. The results-* dirs are the runs the ticket cites.
+// Each run starts a fresh browser profile and prints a cold and a Cache-API-warm pass as JSON.
+// Unset SSL_CERT_FILE first if your shell pins one. The results-* dirs are the runs the ticket cites.
 import { chromium } from '@playwright/test';
-import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path'; import { execSync } from 'node:child_process'; import { fileURLToPath } from 'node:url';
+import http from 'node:http'; import os from 'node:os'; import fs from 'node:fs'; import path from 'node:path'; import { execSync } from 'node:child_process'; import { fileURLToPath } from 'node:url';
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const [page, ...rest] = process.argv.slice(2); const query = rest.join('&');
 if (!['raw', 'ort'].includes(page)) throw new Error('usage: node run.mjs raw|ort [dtype=fp32|fp16]');
@@ -25,7 +24,7 @@ function rssTree(root) {
   let total = 0; const stack = [root]; while (stack.length) { const p = stack.pop(); total += rss.get(p) ?? 0; for (const k of kids.get(p) ?? []) stack.push(k); }
   return total * 1024;
 }
-const userDataDir = path.join(dir, 'profile-' + page + (query ? '-' + query.replace(/\W/g, '_') : ''));
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spike-5gn-'));
 const ctx = await chromium.launchPersistentContext(userDataDir, { channel: 'chromium', headless: true,
   args: ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--enable-features=WebGPU', '--enable-precise-memory-info'] });
 // The browser is our direct child with a profile; its helpers carry --type=, and execSync's shell has no profile.
@@ -52,4 +51,4 @@ for (const run of ['cold', 'warm']) {
   await p.close();
 }
 console.log(JSON.stringify(results, null, 1));
-await ctx.close(); server.close();
+await ctx.close(); server.close(); fs.rmSync(userDataDir, { recursive: true });

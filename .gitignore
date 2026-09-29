@@ -2,6 +2,3 @@ node_modules
 dist
 test-results
 playwright-report
-
-# spike benchmark browser profiles
-spikes/**/profile-*/
