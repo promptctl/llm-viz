@@ -22,13 +22,14 @@ export async function probeGpu(nav: Navigator): Promise<Gpu> {
   if (adapter === null) {
     return { kind: 'unavailable', reason: 'navigator.gpu.requestAdapter() returned no adapter' };
   }
+  const description = describeAdapter(adapter.info);
+  // Mirror three's own device request: every feature the adapter offers, so later slices
+  // (timestamp-query for frame timing, float32-filterable) find them enabled. The spec
+  // guarantees the set holds only GPUFeatureName values; the DOM typing widens it to string.
+  const requiredFeatures = [...adapter.features] as GPUFeatureName[];
   try {
-    // Mirror three's own device request: every feature the adapter offers, so later slices
-    // (timestamp-query for frame timing, float32-filterable) find them enabled. The spec
-    // guarantees the set holds only GPUFeatureName values; the DOM typing widens it to string.
-    const requiredFeatures = [...adapter.features] as GPUFeatureName[];
     const device = await adapter.requestDevice({ requiredFeatures });
-    return { kind: 'ready', device, adapter: describeAdapter(adapter.info) };
+    return { kind: 'ready', device, adapter: description };
   } catch (error) {
     return { kind: 'unavailable', reason: `adapter.requestDevice() failed: ${errorMessage(error)}` };
   }

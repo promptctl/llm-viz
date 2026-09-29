@@ -36,6 +36,8 @@ async function mount(gpu: Gpu, canvas: HTMLCanvasElement, win: Window): Promise<
         win.addEventListener('resize', () => stage.resize(viewport(win)));
         return { kind: 'ready', adapter: gpu.adapter };
       } catch (error) {
+        // three destroys only devices it created; this one is ours to release.
+        gpu.device.destroy();
         return { kind: 'unavailable', reason: `renderer failed to initialise: ${errorMessage(error)}` };
       }
     }

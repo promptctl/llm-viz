@@ -17,6 +17,7 @@ export async function mountStage(device: GPUDevice, canvas: HTMLCanvasElement, v
   // never pass as a working instrument.
   const backend: object = renderer.backend;
   if (!('isWebGPUBackend' in backend && backend.isWebGPUBackend === true)) {
+    renderer.dispose();
     throw new Error('WebGPURenderer initialised without a WebGPU backend');
   }
 

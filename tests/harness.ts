@@ -1,5 +1,5 @@
 import { test as base, expect, type Page } from '@playwright/test';
-import type { BootEvent } from '../src/telemetry';
+import type { AppEvent, BootEvent } from '../src/telemetry';
 
 declare global {
   interface Window {
@@ -8,9 +8,16 @@ declare global {
   }
 }
 
-// [LAW:single-enforcer] "the console is clean" is asserted here, once, for every test that
-// uses this `test`; no spec repeats it.
-export const test = base.extend<{ cleanConsole: void }>({
+type Fixtures = {
+  cleanConsole: void;
+  // Resolves with the page's boot event. Listening starts before the test body runs, so a
+  // Vite full reload mid-boot cannot lose it and no page round-trip is needed to read it.
+  boot: Promise<BootEvent>;
+};
+
+export const test = base.extend<Fixtures>({
+  // [LAW:single-enforcer] "the console is clean" is asserted here, once, for every test that
+  // uses this `test`; no spec repeats it.
   cleanConsole: [
     async ({ page }, use) => {
       const noise: string[] = [];
@@ -25,19 +32,23 @@ export const test = base.extend<{ cleanConsole: void }>({
     },
     { auto: true },
   ],
+  boot: async ({ page }, use) => {
+    const message = page.waitForEvent('console', (m) => parseEvent(m.text())?.kind === 'boot');
+    await use(message.then((m) => parseEvent(m.text()) as BootEvent));
+  },
 });
 
 export { expect };
 
-// One round-trip: polls until the boot event exists and returns it, so a Vite full reload
-// between "it exists" and "read it" cannot strand the read on a destroyed context.
-export async function bootEvent(page: Page): Promise<BootEvent> {
-  const handle = await page.waitForFunction(
-    () => ('llmviz' in window ? (window.llmviz.events.find((e) => e.kind === 'boot') ?? null) : null),
-  );
-  const boot = await handle.jsonValue();
-  if (boot === null) throw new Error('waitForFunction resolved without a boot event');
-  return boot;
+// [LAW:parse-dont-validate] telemetry's log line is JSON of an AppEvent; anything else on
+// the console is not an event.
+function parseEvent(text: string): AppEvent | null {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return typeof parsed === 'object' && parsed !== null && 'kind' in parsed ? (parsed as AppEvent) : null;
+  } catch {
+    return null;
+  }
 }
 
 // Records every canvas context the page asks for, so a test can prove which backend was
