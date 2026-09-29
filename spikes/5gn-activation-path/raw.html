@@ -1,4 +1,4 @@
-<!doctype html><meta charset="utf-8"><title>raw path</title><pre id="out"></pre>
+<!doctype html><meta charset="utf-8"><link rel="icon" href="data:,"><title>raw path</title><pre id="out"></pre>
 <script type="module">
 // Hand-rolled path, load stage only: fetch GPT-2 small safetensors, parse the header, put every
 // tensor in its own GPUBuffer. No forward pass here (the ticket forbids building it).
@@ -20,6 +20,7 @@ const t1 = performance.now();
 const n = Number(new DataView(buf).getBigUint64(0, true));
 const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, n)));
 delete header.__metadata__;
+device.pushErrorScope('out-of-memory'); device.pushErrorScope('validation');
 const base = 8 + n; let tensors = 0, gpuBytes = 0; const bufs = [];
 for (const [name, t] of Object.entries(header)) {
   const [s, e] = t.data_offsets; const len = e - s; const padded = (len + 3) & ~3;
@@ -29,6 +30,7 @@ for (const [name, t] of Object.entries(header)) {
 }
 await device.queue.onSubmittedWorkDone();
 r.upload_ms = Math.round(performance.now() - t1);
+for (const err of [await device.popErrorScope(), await device.popErrorScope()]) if (err) throw new Error('upload: ' + err.message);
 r.tensors = tensors; r.gpu_bytes = gpuBytes; r.dtype = header['wte.weight'].dtype;
 r.load_ms = r.fetch_ms + r.upload_ms;
 try { r.ua_memory_bytes = (await performance.measureUserAgentSpecificMemory()).bytes; } catch (e) { r.ua_memory_error = String(e); }

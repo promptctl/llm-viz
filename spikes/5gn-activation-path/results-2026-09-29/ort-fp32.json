@@ -1,14 +1,14 @@
 [
  {
   "run": "cold",
-  "wall_ms": 79545,
-  "rss_delta_bytes": 3710337024,
-  "rss_after_bytes": 4776706048,
+  "wall_ms": 87998,
+  "rss_delta_bytes": 3717349376,
+  "rss_after_bytes": 4787372032,
   "path": "ort",
   "dtype": "fp32",
-  "load_ms": 19016,
+  "load_ms": 27000,
   "tokens": 10,
-  "first_forward_ms": 103,
+  "first_forward_ms": 117,
   "outputs": [
    "logits",
    "present.0.key",
@@ -43,22 +43,20 @@
   ],
   "warm_forward_ms": 18,
   "top1": " he",
-  "ua_memory_bytes": 1793863943,
-  "js_heap": 45961722,
-  "errors": [
-   "Failed to load resource: the server responded with a status of 404 (Not Found)"
-  ]
+  "ua_memory_bytes": 1793865248,
+  "js_heap": 45965403,
+  "errors": []
  },
  {
   "run": "warm",
-  "wall_ms": 62653,
-  "rss_delta_bytes": 3617423360,
-  "rss_after_bytes": 4735385600,
+  "wall_ms": 63246,
+  "rss_delta_bytes": 3615260672,
+  "rss_after_bytes": 4731879424,
   "path": "ort",
   "dtype": "fp32",
-  "load_ms": 2310,
+  "load_ms": 2911,
   "tokens": 10,
-  "first_forward_ms": 95,
+  "first_forward_ms": 110,
   "outputs": [
    "logits",
    "present.0.key",
@@ -91,10 +89,10 @@
    10,
    50257
   ],
-  "warm_forward_ms": 19,
+  "warm_forward_ms": 18,
   "top1": " he",
-  "ua_memory_bytes": 1793850676,
-  "js_heap": 45935627,
+  "ua_memory_bytes": 1793852337,
+  "js_heap": 45937720,
   "errors": []
  }
 ]
