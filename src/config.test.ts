@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { modelConfig, presets, type ModelShape } from './config';
+import { gpt2, modelConfig, presets, type ModelShape } from './config';
 
 const small: ModelShape = { L: 12, H: 768, heads: 12, dFf: 3072, V: 50257, nCtx: 1024 };
 
@@ -25,6 +25,12 @@ describe('modelConfig', () => {
   it('keeps only the shape, whatever else the source object carried', () => {
     const header = { ...small, name: 'gpt2', dtype: 'f32' } as ModelShape;
     expect(modelConfig(header)).toEqual({ ...small, dHead: 64 });
+  });
+});
+
+describe('gpt2', () => {
+  it('fails loudly when H is not a whole number of 64-wide heads', () => {
+    expect(() => gpt2(12, 770)).toThrow('heads=12.03125 is not a positive integer');
   });
 });
 

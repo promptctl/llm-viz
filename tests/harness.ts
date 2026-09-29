@@ -1,4 +1,5 @@
 import { test as base, expect, type Page } from '@playwright/test';
+import { PNG } from 'pngjs';
 import type { AppEvent, BootEvent } from '../src/telemetry';
 
 declare global {
@@ -40,6 +41,51 @@ export const test = base.extend<Fixtures>({
 
 export { expect };
 
+// Resolves with the next event of `kind` (that `where` accepts) to reach the console. Register
+// it before the action that causes the event, so the event cannot slip past between the action
+// and the wait.
+export function nextEvent<K extends AppEvent['kind']>(
+  page: Page,
+  kind: K,
+  where: (event: Extract<AppEvent, { kind: K }>) => boolean = () => true,
+): Promise<Extract<AppEvent, { kind: K }>> {
+  const matches = (text: string): Extract<AppEvent, { kind: K }> | null => {
+    const event = parseEvent(text);
+    return event?.kind === kind && where(event as Extract<AppEvent, { kind: K }>) ? (event as Extract<AppEvent, { kind: K }>) : null;
+  };
+  return page.waitForEvent('console', (m) => matches(m.text()) !== null).then((m) => matches(m.text())!);
+}
+
+export type LitBounds = { pixels: number; width: number; height: number };
+
+// Where the stage has drawn something: the count and bounding box of pixels brighter than
+// the room's background, read from a screenshot of what the person sees with the DOM
+// overlays hidden. A WebGPU canvas keeps nothing readable after it presents, so the
+// compositor's picture is the rendered state. [LAW:behavior-not-structure]
+export async function litBounds(page: Page): Promise<LitBounds> {
+  const { width, height, data } = PNG.sync.read(
+    await page.screenshot({ style: 'p#status, form#controls, p#ledger { visibility: hidden }' }),
+  );
+  let pixels = 0;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      // The background is #05060a; anything lit is far brighter than its 21.
+      if (data[i]! + data[i + 1]! + data[i + 2]! > 60) {
+        pixels++;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+  }
+  return { pixels, width: Math.max(0, maxX - minX + 1), height: Math.max(0, maxY - minY + 1) };
+}
 // [LAW:parse-dont-validate] telemetry's log line is JSON of an AppEvent; anything else on
 // the console is not an event.
 function parseEvent(text: string): AppEvent | null {
