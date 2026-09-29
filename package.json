@@ -1,0 +1,25 @@
+{
+  "name": "llm-viz",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A transformer you can stand inside — interactive 3D residual-stream visualization",
+  "scripts": {
+    "dev": "vite --port 5173 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --port 5173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test"
+  },
+  "packageManager": "pnpm@10.28.2",
+  "dependencies": {
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/three": "^0.186.0",
+    "@webgpu/types": "^0.1.74",
+    "typescript": "7.0.2",
+    "vite": "8.3.1"
+  }
+}
